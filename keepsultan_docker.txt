@@ -1,0 +1,8 @@
+docker run -d \
+  --name keepsultan \
+  -p 5010:5010 \
+  -v /root/keepsultan/uploads:/app/static/uploads \
+  -v /root/keepsultan/output:/app/static/output \
+  -e "SECRET_KEY=Write it as you want" \
+  --restart=unless-stopped \
+  keepsultan:latest
