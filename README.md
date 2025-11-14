@@ -7,7 +7,7 @@ KeepGenertion Web 是基于[KeepSultan](https://github.com/Carzit/KeepSultan)开
 ## 🚀 在线体验
 
 [立即使用](https://keep.hshoe.cn)  
-*无需安装，打开即用*
+无需安装，打开即用
 
 ## ✨ 核心功能
 
@@ -48,43 +48,19 @@ KeepGenertion Web 是基于[KeepSultan](https://github.com/Carzit/KeepSultan)开
 - 累计爬升（cumulative_climb）
 - 平均步频（average_cadence）
 - 运动负荷（exercise_load）
+
 我们建议您上传的头像图片宽高比为1:1，地图图片宽高比为35:28
 
 
 ## 本地部署
 
-本教程仅介绍最简单的开发环境下的Flask部署，生产环境推荐使用生产WSGI服务替代：
+本项目已经更新Docker镜像，推荐使用Docker镜像部署
 
-1. 安装基础依赖：
-  sudo apt install -y python3-pip python3-venv nginx git
-2. 将项目git clone到/deploy目录下
-3. 创建虚拟环境  
-   cd keep-html  
-   python3 -m venv venv  
-   source venv/bin/activate  
-   pip install flask pillow  
-4. 创建服务文件：  
-   - 创建 /etc/systemd/system/keep.service
-   - 添加内容：  
-   [Unit]  
-    Description=KeepGneration-Web  
-    After=network.target  
-  
-   [Service]  
-    User=root #此处假定为root用户，可自行修改  
-    Group=root  
-    WorkingDirectory=/deploy/keep-html #将下面三项的/deploy修改为对于部署目录  
-    Environment="PATH=/deploy/keep-html/venv/bin"  
-    ExecStart=/deploy/keep-html/venv/bin/python /deploy/keep-html/app.py  
-  
-   [Install]   
-    WantedBy=multi-user.target  
-5. 启动服务：  
-   systemctl start keep.service  
-   systemctl enable keep.service  
-   端口号为5010，可通过systemctl status keep.service查看是否启动成功  
-6. 配置nginx反代服务(可选)
+1. 下载本项目提供的名为**keepsultan.tar**的Docker镜像
+2. 在已经安装Docker的机器上，使用**docker load -i /path/to/keepsultan.tar**命令导入镜像
+3. 启动容器的命令已在本项目的**keepsultan_docker.txt**中提供，请直接复制粘贴（注意替换SECRET_KEY环境变量的值）
 
+另外，本项目也提供的源代码，放置在keep-html文件夹中，可以直接在机器本地部署，需要的依赖已在/keep-html/requirements.txt中写明
 
 ## 📜 免责声明
 
