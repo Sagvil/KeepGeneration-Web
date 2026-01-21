@@ -1,0 +1,31 @@
+# 忽略调试输出
+static/output/
+static/uploads/
+
+# 忽略版本控制系统
+.git
+.gitignore
+.svn
+
+# 忽略构建输出（非常重要，防止将本地编译的二进制文件传进容器）
+build/
+bin/
+obj/
+*.o
+*.a
+*.so
+*.out
+
+# 忽略 IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 忽略日志和临时文件
+*.log
+tmp/
+
+# 排除规则示例：忽略所有 md 文件，但保留 README.md
+*.md
+!README.md

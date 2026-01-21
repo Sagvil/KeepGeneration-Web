@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Keep数据生成器</title>
-    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://lib.baomitu.com/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .form-section {
             background: #f8f9fa;
@@ -30,7 +30,7 @@
     <div class="container py-5">
         <h1 class="mb-4 text-center">🏃♂️ Keep运动数据生成器</h1>
 
-        <form method="post" enctype="multipart/form-data">
+        <form id="generateForm" enctype="multipart/form-data">
             <!-- 文件上传部分 -->
             <div class="form-section">
                 <h4>🗺️ 地图设置</h4>
@@ -174,6 +174,67 @@
             </div>
         </form>
     </div>
+    <div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true" style="display: none;">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🎉 生成成功！</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="resultImage" src="" class="img-fluid mb-3 shadow-sm rounded" alt="Result">
+                    <div class="d-grid gap-2 col-8 mx-auto">
+                        <a id="downloadBtn" href="#" class="btn btn-success btn-lg">📥 下载原图</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载中遮罩 -->
+    <div id="loadingOverlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; justify-content:center; align-items:center; flex-direction:column;">
+        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+        <h4 class="text-primary">正在生成运动数据和轨迹...</h4>
+    </div>
+    <script src="https://lib.baomitu.com/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('generateForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const loading = document.getElementById('loadingOverlay');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            
+            // 显示加载状态
+            loading.style.display = 'flex';
+            submitBtn.disabled = true;
+
+            try {
+                const formData = new FormData(this);
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 更新并显示模态框
+                    document.getElementById('resultImage').src = data.image_url;
+                    document.getElementById('downloadBtn').href = data.download_url;
+                    new bootstrap.Modal(document.getElementById('resultModal')).show();
+                } else {
+                    alert('生成失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('网络请求出错，请检查控制台');
+            } finally {
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
 </body>
 
 </html>
