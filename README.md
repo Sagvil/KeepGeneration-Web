@@ -52,13 +52,28 @@ KeepGenertion Web 是基于[KeepSultan](https://github.com/Carzit/KeepSultan)开
 我们建议您上传的头像图片宽高比为1:1，地图图片宽高比为35:28
 
 
-## 本地部署
+## 🐳 Docker 部署
 
-本项目已经更新Docker镜像，推荐使用Docker镜像部署
+本项目已发布 Docker 镜像到 Docker Hub，可以通过以下命令快速部署：
 
-1. 下载本项目提供的名为**keepsultan.tar**的Docker镜像
-2. 在已经安装Docker的机器上，使用**docker load -i /path/to/keepsultan.tar**命令导入镜像
-3. 启动容器的命令已在本项目的**keepsultan_docker.txt**中提供，请直接复制粘贴（注意替换SECRET_KEY环境变量的值）
+1. **拉取镜像**
+
+```bash
+docker pull eltsen00/keepsultan:latest
+```
+
+2. **运行容器**
+
+```bash
+docker run -d \
+  --name keepsultan \
+  -p 5010:5010 \
+  -v ./uploads:/app/static/uploads \
+  -v ./output:/app/static/output \
+  -e "SECRET_KEY=your_secret_key_here" \
+  --restart=unless-stopped \
+  eltsen00/keepsultan:latest
+```
 
 另外，本项目也提供的源代码，放置在keep-html文件夹中，可以直接在机器本地部署，需要的依赖已在/keep-html/requirements.txt中写明
 
