@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
     zlib1g \
     libfreetype6 \
+    libwebp7 \
+    libopenjp2-7 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

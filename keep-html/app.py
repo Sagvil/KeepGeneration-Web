@@ -4,6 +4,7 @@ import time
 from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from PIL import Image
 from KeepSultan import KeepSultan
 
 app = Flask(__name__)
@@ -86,7 +87,7 @@ DEFAULT_CONFIG = {
     "template": "static/default_template.png",
     "map": "static/maps/default.png",
     "username": "Keep User",
-    "date": datetime.now().strftime("%Y/%m/%d"),
+    "date": datetime.now().strftime("%Y-%m-%d"),
     "end_time": datetime.now().strftime("%H:%M"),
     "location": "广州市",
     "weather": "多云",
@@ -110,15 +111,17 @@ def handle_upload(field_name, file_type):
     if file.filename == '':
         return None
     if file and allowed_file(file.filename):
-        filename = secure_filename(f"{file_type}_{datetime.now().timestamp()}.png")
+        img = Image.open(file.stream)
+        img = img.convert("RGBA")
+        filename = f"{file_type}_{int(datetime.now().timestamp())}.png"
         save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(save_path)
+        img.save(save_path, format="PNG")
         return save_path
     return None
 
 def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg'}
+           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'webp'}
 
 def generate_image(template_path, map_path, avatar_path, params, output_path):
     ks = KeepSultan()
@@ -151,12 +154,9 @@ def api_generate():
     try:
         # 处理文件上传
         map_selection = request.form.get('map_preset')
-        custom_map = handle_upload('custom_map', 'map')
         
         # 确定最终地图路径
-        map_path = MAP_PRESETS.get(map_selection) if map_selection else None
-        if custom_map:
-            map_path = custom_map
+        map_path = handle_upload('custom_map', 'map') or MAP_PRESETS.get(map_selection, DEFAULT_CONFIG['map'])
         
         # 处理头像文件
         avatar_path = handle_upload('avatar', 'avatar') or DEFAULT_AVATAR
