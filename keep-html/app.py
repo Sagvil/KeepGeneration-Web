@@ -102,7 +102,7 @@ DEFAULT_CONFIG = {
 
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('index.html', default_config=DEFAULT_CONFIG,map_presets=MAP_PRESETS.keys())
+    return render_template('index.html', default_config=DEFAULT_CONFIG, map_presets=MAP_PRESETS)
 
 def handle_upload(field_name, file_type):
     if field_name not in request.files:
