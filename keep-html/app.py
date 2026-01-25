@@ -214,7 +214,7 @@ def api_generate():
         
         return jsonify({
             "success": True,
-            "image_url": url_for('static', filename=f'output/{output_filename}'),
+            "image_url": url_for('download', filename=output_filename),
             "download_url": url_for('download', filename=output_filename)
         })
 
