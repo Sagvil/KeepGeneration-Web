@@ -1,11 +1,11 @@
 import os
 import threading
 import time
-from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify
-from werkzeug.utils import secure_filename
+import uuid
+from flask import Flask, render_template, request, send_file, url_for, jsonify
 from datetime import datetime
 from PIL import Image
-from KeepSultan import KeepSultan
+from KeepSultan import KeepSultanApp, KeepConfig, NumberRange, TimeRange
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_fallback_secret_key_change_me')
@@ -46,7 +46,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
 
-def cleanup_old_files(folder_path, max_age_seconds):
+def cleanup_old_files(folder_path: str, max_age_seconds: int):
     now = time.time()
     for root, _, files in os.walk(folder_path):
         for filename in files:
@@ -104,46 +104,45 @@ DEFAULT_CONFIG = {
 def index():
     return render_template('index.html', default_config=DEFAULT_CONFIG, map_presets=MAP_PRESETS)
 
-def handle_upload(field_name, file_type):
+def handle_upload(field_name: str, file_type: str) -> str|None:
     if field_name not in request.files:
         return None
     file = request.files[field_name]
-    if file.filename == '':
+    if file.filename == '' or file.filename is None:
         return None
     if file and allowed_file(file.filename):
         img = Image.open(file.stream)
         img = img.convert("RGBA")
-        filename = f"{file_type}_{int(datetime.now().timestamp())}.png"
+        filename = f"{file_type}_{uuid.uuid4().hex}.png"
         save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         img.save(save_path, format="PNG")
         return save_path
     return None
 
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'webp'}
 
-def generate_image(template_path, map_path, avatar_path, params, output_path):
-    ks = KeepSultan()
+def generate_image(template_path: str, map_path: str, avatar_path: str, params: dict, output_path: str):
+    cfg = KeepConfig(
+        template=template_path,
+        map=map_path,
+        avatar=avatar_path,
+        username=params['username'],
+        date=params['date'].replace('-', '/'),
+        location=params['location'],
+        weather=params['weather'],
+        temperature=params['temperature'],
+        end_time=params['end_time'],
+        total_km=NumberRange(params['total_km'][0], params['total_km'][1], 2),
+        sport_time=TimeRange(params['sport_time'][0], params['sport_time'][1]),
+        total_time=TimeRange(params['total_time'][0], params['total_time'][1]),
+        cumulative_climb=NumberRange(params['cumulative_climb'][0], params['cumulative_climb'][1], 0),
+        average_cadence=NumberRange(params['average_cadence'][0], params['average_cadence'][1], 0),
+        exercise_load=NumberRange(params['exercise_load'][0], params['exercise_load'][1], 0)
+    )
     
-    # 配置参数
-    ks.configs.update({
-        'template': template_path,
-        'map': map_path,
-        'avatar': avatar_path,
-        'username': params['username'],
-        'date': params['date'].replace('-', '/'),
-        'location': params['location'],
-        'weather': params['weather'],
-        'temperature': params['temperature'],
-        'end_time': params['end_time'],
-        'total_km': params['total_km'],
-        'sport_time': params['sport_time'],
-        'total_time': params['total_time'],
-        'cumulative_climb': params['cumulative_climb'],
-        'average_cadence': params['average_cadence'],
-        'exercise_load': params['exercise_load']
-    })
+    ks = KeepSultanApp(cfg)
     
     # 生成图片
     ks.process()
@@ -153,18 +152,31 @@ def generate_image(template_path, map_path, avatar_path, params, output_path):
 def api_generate():
     try:
         # 处理文件上传
-        map_selection = request.form.get('map_preset')
-        
+        map_uploaded_path = handle_upload('custom_map', 'map')
+        avatar_uploaded_path = handle_upload('avatar', 'avatar')
+
         # 确定最终地图路径
-        map_path = handle_upload('custom_map', 'map') or MAP_PRESETS.get(map_selection, DEFAULT_CONFIG['map'])
-        
-        # 处理头像文件
-        avatar_path = handle_upload('avatar', 'avatar') or DEFAULT_AVATAR
+        if map_uploaded_path:
+            map_path = map_uploaded_path
+        else:
+            map_selection = request.form.get('map_preset')
+            if map_selection and map_selection in MAP_PRESETS:
+                map_path = MAP_PRESETS.get(map_selection)
+            else:
+                map_path = DEFAULT_CONFIG['map']
+
+        # 确定最终头像路径
+        if avatar_uploaded_path:
+            avatar_path = avatar_uploaded_path
+        else:
+            avatar_path = DEFAULT_AVATAR
 
         # 获取表单参数
-        # 使用 or 运算符处理空字符串情况，防止 float转换失败
+        # 更加严谨的空值判断与清除空白符
         def get_val(key, default):
             val = request.form.get(key)
+            if val is not None:
+                val = val.strip()
             return val if val else default
 
         form_data = {
@@ -221,7 +233,7 @@ def api_generate():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/download/<filename>')
+@app.route('/download/<filename>', methods=['GET'])
 def download(filename):
     return send_file(
         os.path.join(app.config['OUTPUT_FOLDER'], filename),
