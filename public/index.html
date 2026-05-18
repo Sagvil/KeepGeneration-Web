@@ -14,11 +14,7 @@
     }
 
     * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-    }
+    body { margin: 0; min-height: 100vh; }
 
     main {
       display: grid;
@@ -36,36 +32,12 @@
       padding: 20px;
     }
 
-    h1 {
-      margin: 0 0 4px;
-      font-size: 24px;
-      line-height: 1.25;
-    }
-
-    .sub {
-      margin: 0 0 18px;
-      color: #777b84;
-      font-size: 14px;
-    }
-
-    form {
-      display: grid;
-      gap: 14px;
-    }
-
-    fieldset {
-      border: 0;
-      padding: 0;
-      margin: 0;
-      display: grid;
-      gap: 10px;
-    }
-
-    legend {
-      padding: 8px 0 2px;
-      font-weight: 700;
-      color: #2c2e35;
-    }
+    h1 { margin: 0 0 4px; font-size: 24px; line-height: 1.25; }
+    .sub, .hint, .status { margin: 0; color: #777b84; font-size: 13px; }
+    .sub { margin-bottom: 18px; }
+    form, fieldset { display: grid; gap: 12px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    legend { padding: 8px 0 2px; font-weight: 700; color: #2c2e35; }
 
     label {
       display: grid;
@@ -107,15 +79,8 @@
       cursor: pointer;
     }
 
-    .primary {
-      color: #fff;
-      background: #22c58e;
-    }
-
-    .secondary {
-      color: #17181d;
-      background: #eef0f3;
-    }
+    .primary { color: #fff; background: #22c58e; }
+    .secondary { color: #17181d; background: #eef0f3; }
 
     .preview {
       min-width: 0;
@@ -132,17 +97,8 @@
       box-shadow: 0 12px 36px rgba(31, 35, 44, .12);
     }
 
-    .hint {
-      margin: 0;
-      font-size: 13px;
-      color: #777b84;
-    }
-
     @media (max-width: 920px) {
-      main {
-        grid-template-columns: 1fr;
-        padding: 14px;
-      }
+      main { grid-template-columns: 1fr; padding: 14px; }
     }
   </style>
 </head>
@@ -155,16 +111,17 @@
       <form id="dataForm">
         <fieldset>
           <legend>基础信息</legend>
-          <label>用户名 <input name="username" value="郑竣仁23343093"></label>
+          <label>用户名 <input name="username" value="keep"></label>
           <div class="grid">
             <label>日期 <input name="date" type="date" value="2026-05-13"></label>
             <label>结束时间 <input name="endTime" type="time" value="21:37"></label>
           </div>
           <div class="grid">
-            <label>地点 <input name="location" value="广州市"></label>
+            <label>地点 <input name="location" value="SYSU 英东体育场"></label>
             <label>天气 <input name="weather" value="阴"></label>
           </div>
           <label>温度 <input name="temperature" value="30°C"></label>
+          <p class="status" id="weatherStatus">更改日期、时间或地图后会自动查询天气。</p>
         </fieldset>
 
         <fieldset>
@@ -210,9 +167,7 @@
 
         <fieldset>
           <legend>地图</legend>
-          <select name="map">
-            <option value="/assets/maps/map4.png" selected>SYSU 英东体育场</option>
-          </select>
+          <select name="map" id="mapSelect"></select>
         </fieldset>
 
         <div class="actions">
@@ -223,19 +178,79 @@
     </section>
 
     <section class="preview">
-      <canvas id="keepCanvas" width="1080" height="3600"></canvas>
+      <canvas id="keepCanvas" width="1080" height="3820"></canvas>
       <p class="hint">预览会随输入自动刷新。</p>
     </section>
   </main>
 
   <script>
+    const STORAGE_KEY = "keepFormState";
+    const MAP_PRESETS = [
+      ["default", "通用地图（无明显地理标识）", "/assets/maps/default.png"],
+      ["map6", "SYSU 东校园体育场 1", "/assets/maps/map6.png"],
+      ["map15", "SYSU 东校园体育场 2", "/assets/maps/map15.png"],
+      ["map16", "SYSU 东校园体育场 3", "/assets/maps/map16.png"],
+      ["map17", "SYSU 东校园体育场 4", "/assets/maps/map17.png"],
+      ["map18", "SYSU 东校园体育场 5", "/assets/maps/map18.png"],
+      ["map19", "SYSU 东校园体育场 6", "/assets/maps/map19.png"],
+      ["map20", "SYSU 东校园体育场 7", "/assets/maps/map20.png"],
+      ["map7", "SYSU 东校园环形大圈", "/assets/maps/map7.png"],
+      ["map13", "大学城中环路", "/assets/maps/map13.png"],
+      ["map4", "SYSU 英东体育场", "/assets/maps/map4.png"],
+      ["map1", "SYSU 南校园大圈", "/assets/maps/map1.png"],
+      ["map2", "SYSU 南校园小圈", "/assets/maps/map2.png"],
+      ["map3", "SYSU 南校园中轴线", "/assets/maps/map3.png"],
+      ["map5", "SYSU 南校园珠江南岸", "/assets/maps/map5.png"],
+      ["map12", "二沙岛", "/assets/maps/map12.png"],
+      ["map14", "花城广场", "/assets/maps/map14.png"],
+      ["map8", "SYSU 珠海校区", "/assets/maps/map8.png"],
+      ["map9", "苏州大学", "/assets/maps/map9.png"],
+      ["map10", "中央财经大学", "/assets/maps/map10.png"],
+      ["map11", "中南大学", "/assets/maps/map11.png"],
+    ];
+
     const form = document.getElementById("dataForm");
+    const mapSelect = document.getElementById("mapSelect");
+    const weatherStatus = document.getElementById("weatherStatus");
     const canvas = document.getElementById("keepCanvas");
     const ctx = canvas.getContext("2d");
     const imageCache = new Map();
 
+    function mapById(id) {
+      return MAP_PRESETS.find(([mapId]) => mapId === id) || MAP_PRESETS.find(([mapId]) => mapId === "map4");
+    }
+
+    function setupMaps() {
+      for (const [id, label, path] of MAP_PRESETS) {
+        const option = document.createElement("option");
+        option.value = id;
+        option.dataset.path = path;
+        option.textContent = label;
+        if (id === "map4") option.selected = true;
+        mapSelect.append(option);
+      }
+    }
+
     function values() {
       return Object.fromEntries(new FormData(form).entries());
+    }
+
+    function saveState() {
+      localStorage.setItem("keepFormState", JSON.stringify(values()));
+    }
+
+    function restoreState() {
+      const raw = localStorage.getItem("keepFormState");
+      if (!raw) return;
+      try {
+        const state = JSON.parse(raw);
+        for (const [key, value] of Object.entries(state)) {
+          const field = form.elements.namedItem(key);
+          if (field && typeof value === "string") field.value = value;
+        }
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
     }
 
     function loadImage(src) {
@@ -276,66 +291,82 @@
     }
 
     function dateText(value) {
-      return value.replaceAll("-", "/");
+      return String(value || "").replaceAll("-", "/");
+    }
+
+    function paceText(value) {
+      return String(value || "").replace(":", "'") + "''";
+    }
+
+    async function fetchWeather() {
+      const v = values();
+      if (!v.date || !v.endTime || !v.map) return;
+      weatherStatus.textContent = "正在查询天气...";
+      try {
+        const response = await fetch(`/api/weather?map=${encodeURIComponent(v.map)}&date=${encodeURIComponent(v.date)}&time=${encodeURIComponent(v.endTime)}`);
+        if (!response.ok) throw new Error(`weather ${response.status}`);
+        const data = await response.json();
+        if (data.weather) form.elements.weather.value = data.weather;
+        if (data.temperature) form.elements.temperature.value = data.temperature;
+        weatherStatus.textContent = "天气已自动更新。";
+        saveState();
+        await render();
+      } catch {
+        weatherStatus.textContent = "天气查询失败，已保留当前手动输入。";
+      }
     }
 
     async function render() {
       const v = values();
-      const map = await loadImage(v.map);
-      canvas.height = 3920;
+      const [, , mapPath] = mapById(v.map);
+      const map = await loadImage(mapPath);
+      canvas.height = 3820;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      text(v.endTime, 70, 70, 38);
-      text("⌁⌁⌁  WiFi  93%", 775, 68, 28);
-      text("‹", 55, 190, 82, 300);
-      roundedRect(635, 126, 145, 72, 36, "#f7f7f7");
-      text("▣ 隐私", 660, 173, 32, 700);
-      text("↗  ⋯", 870, 178, 64, 700);
+      text("‹", 55, 112, 82, 300);
+      roundedRect(635, 52, 145, 72, 36, "#f7f7f7");
+      text("▣ 隐私", 660, 99, 32, 700);
+      text("↗  ⋯", 870, 104, 64, 700);
 
-      roundedRect(65, 242, 74, 74, 37, "#f4f4f4");
-      text((v.username || "K").slice(0, 1), 89, 292, 34, 700, "#ddd");
-      text(v.username, 160, 282, 42, 700);
-      text(`${dateText(v.date)} ${v.endTime} - ${v.endTime} ${v.location} · ${v.weather} · ${v.temperature}`, 160, 326, 32, 400, "#8f8f94");
+      roundedRect(65, 168, 74, 74, 37, "#f4f4f4");
+      text((v.username || "K").slice(0, 1), 89, 218, 34, 700, "#ddd");
+      text(v.username || "keep", 160, 208, 42, 700);
+      text(`${dateText(v.date)} ${v.endTime} - ${v.endTime} ${v.location} · ${v.weather} · ${v.temperature}`, 160, 252, 32, 400, "#8f8f94");
 
-      text("🏃 户外跑步", 65, 460, 48, 800, "#292a33");
-      text(Number(v.totalKm).toFixed(2), 58, 650, 170, 900);
-      text("公里", 438, 650, 48);
+      text("🏃 户外跑步", 65, 386, 48, 800, "#292a33");
+      text(Number(v.totalKm || 0).toFixed(2), 58, 576, 170, 900);
+      text("公里", 438, 576, 48);
 
       ctx.globalAlpha = 0.72;
-      ctx.drawImage(map, 40, 720, 1000, 800);
+      ctx.drawImage(map, 40, 646, 1000, 800);
       ctx.globalAlpha = 1;
-      roundedRect(910, 755, 100, 245, 4, "rgba(255,255,255,.85)");
-      text("⛶", 944, 825, 48, 800);
-      text("全屏", 936, 872, 26);
-      text("▶", 943, 942, 48, 800);
-      text("视频", 936, 990, 26);
-      text("慢", 88, 1468, 28, 700, "#e75f6a");
+      text("慢", 88, 1394, 28, 700, "#e75f6a");
       ctx.strokeStyle = "#2dcfb5";
       ctx.lineWidth = 8;
       ctx.beginPath();
-      ctx.moveTo(130, 1460);
-      ctx.lineTo(240, 1460);
+      ctx.moveTo(130, 1386);
+      ctx.lineTo(240, 1386);
       ctx.stroke();
-      text("快", 255, 1468, 28, 700, "#14c8cc");
+      text("快", 255, 1394, 28, 700, "#14c8cc");
       ctx.fillStyle = "rgba(245,255,249,.9)";
-      ctx.fillRect(40, 1520, 1000, 100);
-      text("📍 获得了 1 个跑步路线成绩", 85, 1586, 42, 800);
-      text("›", 985, 1590, 70, 700);
+      ctx.fillRect(40, 1446, 1000, 100);
+      text("📍 获得了 1 个跑步路线成绩", 85, 1512, 42, 800);
+      text("›", 985, 1516, 70, 700);
 
-      text("运动数据", 58, 1740, 48, 800, "#292a33");
-      detailButton(835, 1688);
+      text("运动数据", 58, 1666, 48, 800, "#292a33");
+      detailButton(835, 1614);
       const metrics = [
-        ["训练时长", v.sportTime, "", 58, 1870],
-        ["平均配速", v.pace, "", 430, 1870],
-        ["运动消耗", v.calories, "千卡", 790, 1870],
-        ["总时长", v.totalTime, "", 58, 2030],
-        ["运动负荷", v.exerciseLoad, "", 430, 2030],
-        ["平均心率", v.heartRate, "次/分", 790, 2030],
-        ["平均步频", v.averageCadence, "", 58, 2190],
-        ["平均功率", v.power, "瓦", 430, 2190],
-        ["平均步幅", v.stride, "米", 790, 2190],
+        ["训练时长", v.sportTime, "", 58, 1796],
+        ["平均配速", v.pace, "", 430, 1796],
+        ["运动消耗", v.calories, "千卡", 790, 1796],
+        ["总时长", v.totalTime, "", 58, 1956],
+        ["运动负荷", v.exerciseLoad, "", 430, 1956],
+        ["平均心率", v.heartRate, "次/分", 790, 1956],
+        ["平均步频", v.averageCadence, "", 58, 2116],
+        ["平均功率", v.power, "瓦", 430, 2116],
+        ["平均步幅", v.stride, "米", 790, 2116],
       ];
       for (const [label, value, unit, x, y] of metrics) {
         text(label, x, y, 34, 600, "#a0a0a4");
@@ -343,54 +374,54 @@
         if (unit) text(unit, x + 125, y + 72, 30, 600);
       }
 
-      divider(2350);
-      text("运动趋势", 58, 2490, 48, 800, "#292a33");
-      roundedRect(270, 2448, 66, 40, 10, "#dcb05c");
-      text("会员", 281, 2478, 24, 700, "#fff");
-      detailButton(835, 2438);
-      text(`与上次 ${(Number(v.totalKm) - .25).toFixed(2)} 公里跑步各项数据对比`, 58, 2605, 34, 700, "#999");
-      roundedRect(58, 2690, 145, 58, 29, "#7a5df0");
-      text("▲ 上升", 82, 2729, 30, 700, "#fff");
-      roundedRect(430, 2690, 145, 58, 29, "#27c798");
-      text("▼ 下降", 452, 2729, 30, 700, "#fff");
-      roundedRect(790, 2690, 145, 58, 29, "#efefef");
-      text("━ 持平", 815, 2729, 30, 700, "#888");
-      text("8", 58, 2830, 58, 900);
-      text("项", 120, 2830, 28);
-      text("4", 430, 2830, 58, 900);
-      text("项", 492, 2830, 28);
-      text("0", 790, 2830, 58, 900);
-      text("项", 852, 2830, 28);
+      divider(2276);
+      text("运动趋势", 58, 2416, 48, 800, "#292a33");
+      roundedRect(270, 2374, 66, 40, 10, "#dcb05c");
+      text("会员", 281, 2404, 24, 700, "#fff");
+      detailButton(835, 2364);
+      text(`与上次 ${(Number(v.totalKm || 0) - .25).toFixed(2)} 公里跑步各项数据对比`, 58, 2531, 34, 700, "#999");
+      roundedRect(58, 2616, 145, 58, 29, "#7a5df0");
+      text("▲ 上升", 82, 2655, 30, 700, "#fff");
+      roundedRect(430, 2616, 145, 58, 29, "#27c798");
+      text("▼ 下降", 452, 2655, 30, 700, "#fff");
+      roundedRect(790, 2616, 145, 58, 29, "#efefef");
+      text("━ 持平", 815, 2655, 30, 700, "#888");
+      text("8", 58, 2756, 58, 900);
+      text("项", 120, 2756, 28);
+      text("4", 430, 2756, 58, 900);
+      text("项", 492, 2756, 28);
+      text("0", 790, 2756, 58, 900);
+      text("项", 852, 2756, 28);
 
-      divider(2915);
-      text("特别成就", 58, 3055, 48, 800, "#292a33");
-      text("（共 1 个）", 270, 3055, 30, 600, "#999");
-      roundedRect(65, 3135, 94, 94, 47, "#eee");
-      roundedRect(88, 3158, 48, 48, 24, "#f3d952");
-      text("Lv", 97, 3193, 20);
-      text("获得新徽章 ›", 200, 3175, 30, 700, "#ccc");
-      text("五月挑战 Lv1", 200, 3225, 40, 800);
+      divider(2841);
+      text("特别成就", 58, 2981, 48, 800, "#292a33");
+      text("（共 1 个）", 270, 2981, 30, 600, "#999");
+      roundedRect(65, 3061, 94, 94, 47, "#eee");
+      roundedRect(88, 3084, 48, 48, 24, "#f3d952");
+      text("Lv", 97, 3119, 20);
+      text("获得新徽章 ›", 200, 3101, 30, 700, "#ccc");
+      text("五月挑战 Lv1", 200, 3151, 40, 800);
 
-      divider(3335);
-      text("分段详情", 58, 3475, 48, 800, "#292a33");
-      roundedRect(705, 3425, 72, 72, 36, "#f7f7f7");
-      text("↗", 725, 3477, 40, 700);
-      detailButton(835, 3425);
-      text("#", 78, 3595, 28, 600, "#999");
-      text("公里", 255, 3595, 28, 600, "#999");
-      text("用时", 490, 3595, 28, 600, "#999");
-      text("配速", 710, 3595, 28, 600, "#999");
-      text("心率", 925, 3595, 28, 600, "#999");
-      await renderRows(v);
+      divider(3261);
+      text("分段详情", 58, 3401, 48, 800, "#292a33");
+      roundedRect(705, 3351, 72, 72, 36, "#f7f7f7");
+      text("↗", 725, 3403, 40, 700);
+      detailButton(835, 3351);
+      text("#", 78, 3521, 28, 600, "#999");
+      text("公里", 255, 3521, 28, 600, "#999");
+      text("用时", 490, 3521, 28, 600, "#999");
+      text("配速", 710, 3521, 28, 600, "#999");
+      text("心率", 925, 3521, 28, 600, "#999");
+      renderRows(v);
     }
 
-    async function renderRows(v) {
+    function renderRows(v) {
       const rows = [
-        ["1", "", "1.00", v.split1, v.split1.replace(":", "'") + "''", v.splitHr1],
-        ["2", "最快", "1.00", v.split2, v.split2.replace(":", "'") + "''", v.splitHr2],
-        ["3", "", "1.00", v.split3, v.split3.replace(":", "'") + "''", v.splitHr3],
+        ["1", "", "1.00", v.split1, paceText(v.split1), v.splitHr1],
+        ["2", "最快", "1.00", v.split2, paceText(v.split2), v.splitHr2],
+        ["3", "", "1.00", v.split3, paceText(v.split3), v.splitHr3],
       ];
-      let y = 3670;
+      let y = 3596;
       for (const row of rows) {
         const active = row[0] === "2";
         if (active) roundedRect(55, y - 48, 970, 64, 32, "#42ca9d");
@@ -413,9 +444,34 @@
       link.click();
     }
 
-    document.getElementById("renderButton").addEventListener("click", render);
+    function updateLocationFromMap() {
+      const [, label] = mapById(mapSelect.value);
+      form.elements.location.value = label;
+    }
+
+    let weatherTimer = 0;
+    function queueWeatherFetch() {
+      clearTimeout(weatherTimer);
+      weatherTimer = setTimeout(() => fetchWeather(), 350);
+    }
+
+    setupMaps();
+    restoreState();
+    form.addEventListener("input", () => {
+      saveState();
+      render().catch(console.error);
+    });
+    for (const name of ["date", "endTime"]) {
+      form.elements[name].addEventListener("change", queueWeatherFetch);
+    }
+    mapSelect.addEventListener("change", () => {
+      updateLocationFromMap();
+      saveState();
+      queueWeatherFetch();
+      render().catch(console.error);
+    });
+    document.getElementById("renderButton").addEventListener("click", () => render().catch(console.error));
     document.getElementById("downloadScreenshot").addEventListener("click", download);
-    form.addEventListener("input", () => render().catch(console.error));
     render().catch(console.error);
   </script>
 </body>
