@@ -39,6 +39,58 @@ function timestampFor(date, time) {
   return Math.floor(new Date(`${date}T${time}:00+08:00`).getTime() / 1000);
 }
 
+function nearestHourlyPoint(hourly, date, time) {
+  const target = `${date}T${String(time || "").slice(0, 2)}:00`;
+  const index = hourly?.time?.indexOf(target) ?? -1;
+  const safeIndex = index >= 0 ? index : 0;
+  if (!hourly?.time?.length || hourly.temperature_2m?.[safeIndex] == null) {
+    return null;
+  }
+  return {
+    temp: hourly.temperature_2m[safeIndex],
+    code: hourly.weather_code?.[safeIndex],
+  };
+}
+
+function weatherCodeText(code) {
+  if (code === 0) return "晴";
+  if ([1, 2, 3].includes(code)) return "多云";
+  if ([45, 48].includes(code)) return "雾";
+  if ([51, 53, 55, 56, 57].includes(code)) return "毛毛雨";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "雨";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return "雪";
+  if ([95, 96, 99].includes(code)) return "雷雨";
+  return "多云";
+}
+
+async function fetchOpenMeteo(preset, date, time, openWeatherStatus = null) {
+  const apiUrl = new URL("https://archive-api.open-meteo.com/v1/archive");
+  apiUrl.searchParams.set("latitude", String(preset.lat));
+  apiUrl.searchParams.set("longitude", String(preset.lon));
+  apiUrl.searchParams.set("start_date", date);
+  apiUrl.searchParams.set("end_date", date);
+  apiUrl.searchParams.set("hourly", "temperature_2m,weather_code");
+  apiUrl.searchParams.set("timezone", "Asia/Shanghai");
+
+  const response = await fetch(apiUrl);
+  if (!response.ok) {
+    return json({ error: "open_meteo_error", status: response.status, openWeatherStatus }, { status: 502 });
+  }
+
+  const payload = await response.json();
+  const point = nearestHourlyPoint(payload.hourly, date, time);
+  if (!point) {
+    return json({ error: "unexpected_open_meteo_response", openWeatherStatus }, { status: 502 });
+  }
+
+  return json({
+    weather: weatherCodeText(Number(point.code)),
+    temperature: `${Math.round(Number(point.temp))}°C`,
+    source: "open-meteo",
+    openWeatherStatus,
+  });
+}
+
 async function handleWeather(request, env) {
   const url = new URL(request.url);
   const mapId = url.searchParams.get("map") || "map4";
@@ -64,7 +116,7 @@ async function handleWeather(request, env) {
 
   const response = await fetch(apiUrl);
   if (!response.ok) {
-    return json({ error: "openweather_error", status: response.status }, { status: 502 });
+    return fetchOpenMeteo(preset, date, time, response.status);
   }
 
   const payload = await response.json();
@@ -79,6 +131,7 @@ async function handleWeather(request, env) {
   return json({
     weather: String(description),
     temperature: `${Math.round(Number(temp))}°C`,
+    source: "openweather",
   });
 }
 

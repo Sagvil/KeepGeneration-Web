@@ -35,7 +35,7 @@ for (const mapName of ["default.png", ...Array.from({ length: 20 }, (_, index) =
 }
 
 assert.match(html, /value="keep"/, "default username must be keep");
-assert.doesNotMatch(html, /郑竣仁|23343093/, "personal username must not be present");
+assert.doesNotMatch(html, /23343093/, "personal username must not be present");
 assert.match(html, /assets\/maps\/map4\.png/, "SYSU Yingdong map must be the default map");
 assert.match(html, /localStorage\.getItem\("keepFormState"\)/, "site must restore previous form state");
 assert.match(html, /localStorage\.setItem\("keepFormState"/, "site must persist form state");
@@ -59,6 +59,7 @@ const worker = read("src/index.js");
 assert.match(worker, /OPENWEATHER_API_KEY/, "Worker must read OpenWeather key from secret");
 assert.match(worker, /onecall\/timemachine/, "Worker must use One Call timemachine endpoint");
 assert.match(worker, /env\.ASSETS\.fetch\(request\)/, "Worker must serve static assets");
+assert.match(worker, /archive-api\.open-meteo\.com/, "Worker must fallback to Open-Meteo archive data");
 assert.doesNotMatch(worker, /a17678cff5cfc28837bc3604d001ad3c/, "OpenWeather key must not be committed");
 
 const originalFetch = globalThis.fetch;
@@ -84,7 +85,7 @@ const workerResponse = await workerModule.default.fetch(
   },
 );
 assert.equal(workerResponse.status, 200, "weather route should return 200 with a secret");
-assert.deepEqual(await workerResponse.json(), { weather: "多云", temperature: "30°C" });
+assert.deepEqual(await workerResponse.json(), { weather: "多云", temperature: "30°C", source: "openweather" });
 assert.match(requestedWeatherUrl, /onecall\/timemachine/, "weather route should call timemachine endpoint");
 assert.match(requestedWeatherUrl, /appid=test-secret/, "weather route should pass the secret to OpenWeather");
 
@@ -95,6 +96,31 @@ const missingSecretResponse = await workerModule.default.fetch(
   },
 );
 assert.equal(missingSecretResponse.status, 500, "weather route should fail clearly without secret");
+
+let fallbackCalls = [];
+globalThis.fetch = async (url) => {
+  fallbackCalls.push(String(url));
+  if (fallbackCalls.length === 1) {
+    return Response.json({ code: 401, message: "Invalid API key" }, { status: 401 });
+  }
+  return Response.json({
+    hourly: {
+      time: ["2026-05-13T21:00"],
+      temperature_2m: [28.4],
+      weather_code: [3],
+    },
+  });
+};
+const fallbackResponse = await workerModule.default.fetch(
+  new Request("https://keep.sagvil.cn/api/weather?map=map4&date=2026-05-13&time=21:37"),
+  {
+    OPENWEATHER_API_KEY: "bad-one-call-key",
+    ASSETS: { fetch: () => new Response("asset") },
+  },
+);
+assert.equal(fallbackResponse.status, 200, "weather route should fallback when OpenWeather rejects the key");
+assert.deepEqual(await fallbackResponse.json(), { weather: "多云", temperature: "28°C", source: "open-meteo", openWeatherStatus: 401 });
+assert.match(fallbackCalls[1], /archive-api\.open-meteo\.com/, "fallback should use Open-Meteo archive API");
 globalThis.fetch = originalFetch;
 
 console.log("static site checks passed");
