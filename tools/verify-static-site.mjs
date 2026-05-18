@@ -44,7 +44,9 @@ assert.match(html, /downloadScreenshot/, "site must support downloading the gene
 assert.doesNotMatch(html, /a17678cff5cfc28837bc3604d001ad3c/, "OpenWeather key must not be committed");
 assert.doesNotMatch(html, /WiFi|93%/, "generated screenshot must not draw the top status bar");
 assert.doesNotMatch(html, /全屏|视频/, "page must not draw a second map control overlay");
-assert.equal((html.match(/获得了 1 个跑步路线成绩/g) || []).length, 1, "route achievement row must be drawn once");
+assert.doesNotMatch(html, /获得了 1 个跑步路线成绩/, "route achievement row must be removed");
+assert.match(html, /async function refreshPreview/, "refresh button must trigger weather and render");
+assert.match(html, /查询成功|查询失败/, "weather status must show success or failure");
 for (const mapName of ["default", ...Array.from({ length: 20 }, (_, index) => `map${index + 1}`)]) {
   assert.match(html, new RegExp(`/assets/maps/${mapName}\\.png`), `missing map option path: ${mapName}`);
 }

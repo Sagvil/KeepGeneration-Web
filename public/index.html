@@ -178,7 +178,7 @@
     </section>
 
     <section class="preview">
-      <canvas id="keepCanvas" width="1080" height="3820"></canvas>
+      <canvas id="keepCanvas" width="1080" height="3700"></canvas>
       <p class="hint">预览会随输入自动刷新。</p>
     </section>
   </main>
@@ -300,27 +300,37 @@
 
     async function fetchWeather() {
       const v = values();
-      if (!v.date || !v.endTime || !v.map) return;
+      if (!v.date || !v.endTime || !v.map) {
+        weatherStatus.textContent = "天气查询失败：缺少日期、时间或地图。";
+        return false;
+      }
       weatherStatus.textContent = "正在查询天气...";
       try {
         const response = await fetch(`/api/weather?map=${encodeURIComponent(v.map)}&date=${encodeURIComponent(v.date)}&time=${encodeURIComponent(v.endTime)}`);
-        if (!response.ok) throw new Error(`weather ${response.status}`);
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
         if (data.weather) form.elements.weather.value = data.weather;
         if (data.temperature) form.elements.temperature.value = data.temperature;
-        weatherStatus.textContent = "天气已自动更新。";
+        weatherStatus.textContent = `查询成功：${data.weather || form.elements.weather.value} ${data.temperature || form.elements.temperature.value}`;
         saveState();
         await render();
-      } catch {
-        weatherStatus.textContent = "天气查询失败，已保留当前手动输入。";
+        return true;
+      } catch (error) {
+        weatherStatus.textContent = `查询失败：${error.message}，已保留当前手动输入。`;
+        return false;
       }
+    }
+
+    async function refreshPreview() {
+      await fetchWeather();
+      await render();
     }
 
     async function render() {
       const v = values();
       const [, , mapPath] = mapById(v.map);
       const map = await loadImage(mapPath);
-      canvas.height = 3820;
+      canvas.height = 3700;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -350,23 +360,18 @@
       ctx.lineTo(240, 1386);
       ctx.stroke();
       text("快", 255, 1394, 28, 700, "#14c8cc");
-      ctx.fillStyle = "rgba(245,255,249,.9)";
-      ctx.fillRect(40, 1446, 1000, 100);
-      text("📍 获得了 1 个跑步路线成绩", 85, 1512, 42, 800);
-      text("›", 985, 1516, 70, 700);
-
-      text("运动数据", 58, 1666, 48, 800, "#292a33");
-      detailButton(835, 1614);
+      text("运动数据", 58, 1546, 48, 800, "#292a33");
+      detailButton(835, 1494);
       const metrics = [
-        ["训练时长", v.sportTime, "", 58, 1796],
-        ["平均配速", v.pace, "", 430, 1796],
-        ["运动消耗", v.calories, "千卡", 790, 1796],
-        ["总时长", v.totalTime, "", 58, 1956],
-        ["运动负荷", v.exerciseLoad, "", 430, 1956],
-        ["平均心率", v.heartRate, "次/分", 790, 1956],
-        ["平均步频", v.averageCadence, "", 58, 2116],
-        ["平均功率", v.power, "瓦", 430, 2116],
-        ["平均步幅", v.stride, "米", 790, 2116],
+        ["训练时长", v.sportTime, "", 58, 1676],
+        ["平均配速", v.pace, "", 430, 1676],
+        ["运动消耗", v.calories, "千卡", 790, 1676],
+        ["总时长", v.totalTime, "", 58, 1836],
+        ["运动负荷", v.exerciseLoad, "", 430, 1836],
+        ["平均心率", v.heartRate, "次/分", 790, 1836],
+        ["平均步频", v.averageCadence, "", 58, 1996],
+        ["平均功率", v.power, "瓦", 430, 1996],
+        ["平均步幅", v.stride, "米", 790, 1996],
       ];
       for (const [label, value, unit, x, y] of metrics) {
         text(label, x, y, 34, 600, "#a0a0a4");
@@ -374,44 +379,44 @@
         if (unit) text(unit, x + 125, y + 72, 30, 600);
       }
 
-      divider(2276);
-      text("运动趋势", 58, 2416, 48, 800, "#292a33");
-      roundedRect(270, 2374, 66, 40, 10, "#dcb05c");
-      text("会员", 281, 2404, 24, 700, "#fff");
-      detailButton(835, 2364);
-      text(`与上次 ${(Number(v.totalKm || 0) - .25).toFixed(2)} 公里跑步各项数据对比`, 58, 2531, 34, 700, "#999");
-      roundedRect(58, 2616, 145, 58, 29, "#7a5df0");
-      text("▲ 上升", 82, 2655, 30, 700, "#fff");
-      roundedRect(430, 2616, 145, 58, 29, "#27c798");
-      text("▼ 下降", 452, 2655, 30, 700, "#fff");
-      roundedRect(790, 2616, 145, 58, 29, "#efefef");
-      text("━ 持平", 815, 2655, 30, 700, "#888");
-      text("8", 58, 2756, 58, 900);
-      text("项", 120, 2756, 28);
-      text("4", 430, 2756, 58, 900);
-      text("项", 492, 2756, 28);
-      text("0", 790, 2756, 58, 900);
-      text("项", 852, 2756, 28);
+      divider(2156);
+      text("运动趋势", 58, 2296, 48, 800, "#292a33");
+      roundedRect(270, 2254, 66, 40, 10, "#dcb05c");
+      text("会员", 281, 2284, 24, 700, "#fff");
+      detailButton(835, 2244);
+      text(`与上次 ${(Number(v.totalKm || 0) - .25).toFixed(2)} 公里跑步各项数据对比`, 58, 2411, 34, 700, "#999");
+      roundedRect(58, 2496, 145, 58, 29, "#7a5df0");
+      text("▲ 上升", 82, 2535, 30, 700, "#fff");
+      roundedRect(430, 2496, 145, 58, 29, "#27c798");
+      text("▼ 下降", 452, 2535, 30, 700, "#fff");
+      roundedRect(790, 2496, 145, 58, 29, "#efefef");
+      text("━ 持平", 815, 2535, 30, 700, "#888");
+      text("8", 58, 2636, 58, 900);
+      text("项", 120, 2636, 28);
+      text("4", 430, 2636, 58, 900);
+      text("项", 492, 2636, 28);
+      text("0", 790, 2636, 58, 900);
+      text("项", 852, 2636, 28);
 
-      divider(2841);
-      text("特别成就", 58, 2981, 48, 800, "#292a33");
-      text("（共 1 个）", 270, 2981, 30, 600, "#999");
-      roundedRect(65, 3061, 94, 94, 47, "#eee");
-      roundedRect(88, 3084, 48, 48, 24, "#f3d952");
-      text("Lv", 97, 3119, 20);
-      text("获得新徽章 ›", 200, 3101, 30, 700, "#ccc");
-      text("五月挑战 Lv1", 200, 3151, 40, 800);
+      divider(2721);
+      text("特别成就", 58, 2861, 48, 800, "#292a33");
+      text("（共 1 个）", 270, 2861, 30, 600, "#999");
+      roundedRect(65, 2941, 94, 94, 47, "#eee");
+      roundedRect(88, 2964, 48, 48, 24, "#f3d952");
+      text("Lv", 97, 2999, 20);
+      text("获得新徽章 ›", 200, 2981, 30, 700, "#ccc");
+      text("五月挑战 Lv1", 200, 3031, 40, 800);
 
-      divider(3261);
-      text("分段详情", 58, 3401, 48, 800, "#292a33");
-      roundedRect(705, 3351, 72, 72, 36, "#f7f7f7");
-      text("↗", 725, 3403, 40, 700);
-      detailButton(835, 3351);
-      text("#", 78, 3521, 28, 600, "#999");
-      text("公里", 255, 3521, 28, 600, "#999");
-      text("用时", 490, 3521, 28, 600, "#999");
-      text("配速", 710, 3521, 28, 600, "#999");
-      text("心率", 925, 3521, 28, 600, "#999");
+      divider(3141);
+      text("分段详情", 58, 3281, 48, 800, "#292a33");
+      roundedRect(705, 3231, 72, 72, 36, "#f7f7f7");
+      text("↗", 725, 3283, 40, 700);
+      detailButton(835, 3231);
+      text("#", 78, 3401, 28, 600, "#999");
+      text("公里", 255, 3401, 28, 600, "#999");
+      text("用时", 490, 3401, 28, 600, "#999");
+      text("配速", 710, 3401, 28, 600, "#999");
+      text("心率", 925, 3401, 28, 600, "#999");
       renderRows(v);
     }
 
@@ -421,7 +426,7 @@
         ["2", "最快", "1.00", v.split2, paceText(v.split2), v.splitHr2],
         ["3", "", "1.00", v.split3, paceText(v.split3), v.splitHr3],
       ];
-      let y = 3596;
+      let y = 3476;
       for (const row of rows) {
         const active = row[0] === "2";
         if (active) roundedRect(55, y - 48, 970, 64, 32, "#42ca9d");
@@ -470,7 +475,7 @@
       queueWeatherFetch();
       render().catch(console.error);
     });
-    document.getElementById("renderButton").addEventListener("click", () => render().catch(console.error));
+    document.getElementById("renderButton").addEventListener("click", () => refreshPreview().catch(console.error));
     document.getElementById("downloadScreenshot").addEventListener("click", download);
     render().catch(console.error);
   </script>
