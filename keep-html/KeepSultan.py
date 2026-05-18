@@ -329,6 +329,34 @@ class ImageEditor:
         font = ImageFont.truetype(style.font_path, style.font_size)
         draw.text(position, text, fill=style.color, font=font)
 
+    def expand_canvas(self, height: int, crop_bottom: int | None = None, color: Color = (255, 255, 255)) -> None:
+        if self.img is None:
+            raise RuntimeError("Base image not loaded")
+        source = self.img
+        if crop_bottom is not None:
+            source = source.crop((0, 0, source.width, crop_bottom))
+        if height <= source.height:
+            self.img = source
+            return
+        canvas = Image.new("RGBA", (source.width, height), color + (255,))
+        canvas.paste(source, (0, 0))
+        self.img = canvas
+
+    def draw_line(self, points: List[Point], color: Color, width: int = 1) -> None:
+        if self.img is None:
+            raise RuntimeError("Base image not loaded")
+        ImageDraw.Draw(self.img).line(points, fill=color, width=width)
+
+    def draw_rect(self, box: Tuple[int, int, int, int], color: Color) -> None:
+        if self.img is None:
+            raise RuntimeError("Base image not loaded")
+        ImageDraw.Draw(self.img).rectangle(box, fill=color)
+
+    def draw_rounded_rect(self, box: Tuple[int, int, int, int], radius: int, color: Color) -> None:
+        if self.img is None:
+            raise RuntimeError("Base image not loaded")
+        ImageDraw.Draw(self.img).rounded_rectangle(box, radius=radius, fill=color)
+
     def save(self, path: Union[str, Path]) -> None:
         if self.img is None:
             raise RuntimeError("Nothing to save")
@@ -398,6 +426,105 @@ class KeepSultanApp:
         total_sec = parse_time_to_seconds(total_time_hms)
         return int(round(700 * (total_sec / 3600)))
 
+    def _style(self, size: int, color: Color = (0, 0, 0), font: Literal["regular", "semi", "bold"] = "regular") -> TextStyle:
+        if font == "semi":
+            return TextStyle(self.cfg.font_semibold.font_path, size, color)
+        if font == "bold":
+            return TextStyle(self.cfg.font_bold_big.font_path, size, color)
+        return TextStyle(self.cfg.font_regular.font_path, size, color)
+
+    def _draw_detail_button(self, x: int, y: int) -> None:
+        self.editor.draw_rounded_rect((x, y, x + 165, y + 72), 36, (248, 248, 248))
+        self.editor.draw_text("查看详情", (x + 28, y + 17), self._style(30, (0, 0, 0)))
+
+    def _draw_divider(self, y: int) -> None:
+        self.editor.draw_rect((0, y, 1080, y + 36), (248, 248, 248))
+
+    def _draw_trend_section(self, y: int, total_km: float) -> int:
+        self._draw_divider(y)
+        y += 88
+        self.editor.draw_text("运动趋势", (55, y), self._style(46, (34, 34, 42)))
+        self.editor.draw_rounded_rect((270, y + 7, 336, y + 45), 10, (219, 174, 93))
+        self.editor.draw_text("会员", (280, y + 9), self._style(24, (255, 255, 255)))
+        self._draw_detail_button(825, y - 5)
+
+        prev_km = max(0.1, total_km - 0.25)
+        self.editor.draw_text(f"与上次 {prev_km:.2f} 公里跑步各项数据对比", (55, y + 120), self._style(34, (150, 150, 150)))
+
+        chips = [
+            ((60, y + 220), (125, 94, 235), "▲ 上升", "8", "项"),
+            ((390, y + 220), (39, 199, 151), "▼ 下降", "4", "项"),
+            ((720, y + 220), (238, 238, 238), "━ 持平", "0", "项"),
+        ]
+        for (x, cy), color, label, value, unit in chips:
+            text_color = (255, 255, 255) if label != "━ 持平" else (130, 130, 130)
+            self.editor.draw_rounded_rect((x, cy, x + 145, cy + 58), 29, color)
+            self.editor.draw_text(label, (x + 22, cy + 10), self._style(28, text_color))
+            self.editor.draw_text(value, (x, cy + 75), self._style(58, (0, 0, 0), "semi"))
+            self.editor.draw_text(unit, (x + 62, cy + 98), self._style(28, (0, 0, 0)))
+        return y + 390
+
+    def _draw_achievement_section(self, y: int) -> int:
+        self._draw_divider(y)
+        y += 88
+        self.editor.draw_text("特别成就", (55, y), self._style(46, (34, 34, 42)))
+        self.editor.draw_text("（共 1 个）", (265, y + 8), self._style(30, (150, 150, 150)))
+
+        icon_x, icon_y = 65, y + 120
+        self.editor.draw_rounded_rect((icon_x, icon_y, icon_x + 94, icon_y + 94), 47, (235, 235, 235))
+        self.editor.draw_rounded_rect((icon_x + 22, icon_y + 20, icon_x + 72, icon_y + 72), 25, (244, 219, 98))
+        self.editor.draw_text("Lv", (icon_x + 30, icon_y + 36), self._style(20, (60, 60, 60)))
+        self.editor.draw_text("获得新徽章 〉", (200, y + 125), self._style(30, (200, 200, 200)))
+        self.editor.draw_text("五月挑战 Lv1", (200, y + 170), self._style(40, (0, 0, 0)))
+        return y + 290
+
+    def _format_mmss(self, seconds: float) -> str:
+        total = max(0, int(round(seconds)))
+        mm, ss = divmod(total, 60)
+        return f"{mm:02d}:{ss:02d}"
+
+    def _draw_segment_section(self, y: int, total_km: float, sport_time: TimeStr) -> int:
+        self._draw_divider(y)
+        y += 88
+        self.editor.draw_text("分段详情", (55, y), self._style(46, (34, 34, 42)))
+        self.editor.draw_rounded_rect((690, y + 2, 760, y + 72), 35, (248, 248, 248))
+        self.editor.draw_text("↗", (710, y + 10), self._style(38, (0, 0, 0)))
+        self._draw_detail_button(820, y)
+
+        header_y = y + 150
+        muted = (150, 150, 150)
+        self.editor.draw_text("#", (76, header_y), self._style(28, muted))
+        self.editor.draw_text("公里", (250, header_y), self._style(28, muted))
+        self.editor.draw_text("用时", (480, header_y), self._style(28, muted))
+        self.editor.draw_text("配速", (700, header_y), self._style(28, muted))
+        self.editor.draw_text("心率", (920, header_y), self._style(28, muted))
+
+        avg_sec = parse_time_to_seconds(sport_time) / max(total_km, 0.1)
+        row_count = max(1, min(6, int(total_km)))
+        pace_factors = [0.92, 0.82, 1.18, 1.04, 0.97, 1.10]
+        row_secs = [avg_sec * pace_factors[i % len(pace_factors)] for i in range(row_count)]
+        fastest_idx = min(range(row_count), key=lambda i: row_secs[i])
+        heart_rates = [157, 174, 170, 166, 172, 168]
+
+        row_y = header_y + 70
+        for idx, sec in enumerate(row_secs):
+            selected = idx == fastest_idx
+            text_color = (255, 255, 255) if selected else (0, 0, 0)
+            light_color = (255, 255, 255) if selected else (180, 180, 180)
+            pace_color = (255, 255, 255) if selected else (39, 199, 151)
+            hr_color = (255, 255, 255) if selected else (224, 76, 105)
+            if selected:
+                self.editor.draw_rounded_rect((55, row_y - 10, 1025, row_y + 58), 30, (66, 204, 159))
+            self.editor.draw_text(str(idx + 1), (78, row_y), self._style(32, light_color if not selected else text_color))
+            if selected:
+                self.editor.draw_text("最快", (160, row_y), self._style(30, text_color))
+            self.editor.draw_text("1.00", (250, row_y), self._style(32, text_color if selected else (80, 80, 80)))
+            self.editor.draw_text(self._format_mmss(sec), (480, row_y), self._style(32, text_color if selected else (80, 80, 80)))
+            self.editor.draw_text(seconds_to_pace_mmss(sec), (700, row_y), self._style(32, pace_color))
+            self.editor.draw_text(str(heart_rates[idx % len(heart_rates)]), (920, row_y), self._style(32, hr_color))
+            row_y += 78
+        return row_y + 60
+
     # ---- 渲染主流程 ----
     def process(self) -> Image.Image:
         #self.cfg.ensure_runtime_defaults()
@@ -465,6 +592,15 @@ class KeepSultanApp:
         cad_x = 790 if safe_int(average_cadence) > 100 else 820
         self.editor.draw_text(str(average_cadence), (cad_x, 1910), self.cfg.font_semibold)  # 平均步频
         self.editor.draw_text(str(exercise_load), (55, 2070), self.cfg.font_semibold)  # 运动负荷
+
+        # The bundled template stops at the data panel and includes a fixed share button.
+        # Keep the generated top part, remove that footer, then draw the missing detail panels.
+        self.editor.expand_canvas(3800, crop_bottom=2190)
+        next_y = self._draw_trend_section(2190, float(total_km))
+        next_y = self._draw_achievement_section(next_y)
+        next_y = self._draw_segment_section(next_y, float(total_km), sport_time)
+        if self.editor.img is not None:
+            self.editor.img = self.editor.img.crop((0, 0, 1080, min(3800, next_y + 36)))
 
         return self.editor.img
 
