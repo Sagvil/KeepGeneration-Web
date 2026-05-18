@@ -103,7 +103,7 @@ async function handleWeather(request, env) {
     return json({ error: "invalid_request" }, { status: 400 });
   }
   if (!env.OPENWEATHER_API_KEY) {
-    return json({ error: "missing_openweather_secret" }, { status: 500 });
+    return fetchOpenMeteo(preset, date, time, "missing_secret");
   }
 
   const apiUrl = new URL("https://api.openweathermap.org/data/3.0/onecall/timemachine");

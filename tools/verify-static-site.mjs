@@ -64,6 +64,15 @@ assert.doesNotMatch(worker, /a17678cff5cfc28837bc3604d001ad3c/, "OpenWeather key
 
 const originalFetch = globalThis.fetch;
 let requestedWeatherUrl = "";
+function openMeteoMock() {
+  return Response.json({
+    hourly: {
+      time: ["2026-05-13T21:00"],
+      temperature_2m: [28.4],
+      weather_code: [3],
+    },
+  });
+}
 globalThis.fetch = async (url) => {
   requestedWeatherUrl = String(url);
   return Response.json({
@@ -89,13 +98,15 @@ assert.deepEqual(await workerResponse.json(), { weather: "多云", temperature: 
 assert.match(requestedWeatherUrl, /onecall\/timemachine/, "weather route should call timemachine endpoint");
 assert.match(requestedWeatherUrl, /appid=test-secret/, "weather route should pass the secret to OpenWeather");
 
+globalThis.fetch = async () => openMeteoMock();
 const missingSecretResponse = await workerModule.default.fetch(
   new Request("https://keep.sagvil.cn/api/weather?map=map4&date=2026-05-13&time=21:37"),
   {
     ASSETS: { fetch: () => new Response("asset") },
   },
 );
-assert.equal(missingSecretResponse.status, 500, "weather route should fail clearly without secret");
+assert.equal(missingSecretResponse.status, 200, "weather route should fallback without OpenWeather secret");
+assert.equal((await missingSecretResponse.json()).source, "open-meteo");
 
 let fallbackCalls = [];
 globalThis.fetch = async (url) => {
@@ -103,13 +114,7 @@ globalThis.fetch = async (url) => {
   if (fallbackCalls.length === 1) {
     return Response.json({ code: 401, message: "Invalid API key" }, { status: 401 });
   }
-  return Response.json({
-    hourly: {
-      time: ["2026-05-13T21:00"],
-      temperature_2m: [28.4],
-      weather_code: [3],
-    },
-  });
+  return openMeteoMock();
 };
 const fallbackResponse = await workerModule.default.fetch(
   new Request("https://keep.sagvil.cn/api/weather?map=map4&date=2026-05-13&time=21:37"),
