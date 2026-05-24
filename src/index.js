@@ -3,7 +3,7 @@ const MAP_PRESETS = {
   map1: { lat: 23.0973, lon: 113.2982 },
   map2: { lat: 23.0973, lon: 113.2982 },
   map3: { lat: 23.0973, lon: 113.2982 },
-  map4: { lat: 23.0973, lon: 113.2982 },
+  map4: { lat: 23.0967, lon: 113.2976 },
   map5: { lat: 23.0965, lon: 113.3002 },
   map6: { lat: 23.0637, lon: 113.3927 },
   map7: { lat: 23.0637, lon: 113.3927 },
@@ -63,8 +63,8 @@ function weatherCodeText(code) {
   return "多云";
 }
 
-async function fetchOpenMeteo(preset, date, time, openWeatherStatus = null) {
-  const apiUrl = new URL("https://archive-api.open-meteo.com/v1/archive");
+async function fetchOpenMeteoEndpoint(endpoint, preset, date, time) {
+  const apiUrl = new URL(endpoint);
   apiUrl.searchParams.set("latitude", String(preset.lat));
   apiUrl.searchParams.set("longitude", String(preset.lon));
   apiUrl.searchParams.set("start_date", date);
@@ -74,21 +74,44 @@ async function fetchOpenMeteo(preset, date, time, openWeatherStatus = null) {
 
   const response = await fetch(apiUrl);
   if (!response.ok) {
-    return json({ error: "open_meteo_error", status: response.status, openWeatherStatus }, { status: 502 });
+    return { ok: false, status: response.status };
   }
 
   const payload = await response.json();
   const point = nearestHourlyPoint(payload.hourly, date, time);
   if (!point) {
-    return json({ error: "unexpected_open_meteo_response", openWeatherStatus }, { status: 502 });
+    return { ok: false, status: "unexpected_response" };
+  }
+
+  return { ok: true, point };
+}
+
+async function fetchOpenMeteo(preset, date, time, openWeatherStatus = null) {
+  const endpoints = [
+    ["open-meteo-forecast", "https://api.open-meteo.com/v1/forecast"],
+    ["open-meteo-archive", "https://archive-api.open-meteo.com/v1/archive"],
+  ];
+  const attempts = [];
+
+  for (const [source, endpoint] of endpoints) {
+    const result = await fetchOpenMeteoEndpoint(endpoint, preset, date, time);
+    if (result.ok) {
+      const point = result.point;
+      return json({
+        weather: weatherCodeText(Number(point.code)),
+        temperature: `${Math.round(Number(point.temp))}°C`,
+        source,
+        openWeatherStatus,
+      });
+    }
+    attempts.push({ source, status: result.status });
   }
 
   return json({
-    weather: weatherCodeText(Number(point.code)),
-    temperature: `${Math.round(Number(point.temp))}°C`,
-    source: "open-meteo",
+    error: "open_meteo_error",
+    attempts,
     openWeatherStatus,
-  });
+  }, { status: 502 });
 }
 
 async function handleWeather(request, env) {

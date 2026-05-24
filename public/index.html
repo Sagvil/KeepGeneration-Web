@@ -127,42 +127,31 @@
         <fieldset>
           <legend>运动数据</legend>
           <div class="grid">
-            <label>公里数 <input name="totalKm" type="number" step="0.01" value="3.01"></label>
+            <label>公里数 <input name="totalKm" type="number" step="0.01" value="3.50"></label>
             <label>训练时长 <input name="sportTime" value="00:24:04"></label>
           </div>
           <div class="grid">
             <label>总时长 <input name="totalTime" value="00:24:04"></label>
-            <label>平均配速 <input name="pace" value="07'58''"></label>
+            <label>平均配速 <input name="pace" value="06'53''"></label>
           </div>
           <div class="grid">
-            <label>运动消耗 <input name="calories" type="number" value="196"></label>
-            <label>运动负荷 <input name="exerciseLoad" type="number" value="87"></label>
+            <label>运动消耗 <input name="calories" type="number" value="228"></label>
+            <label>运动负荷 <input name="exerciseLoad" type="number" value="51"></label>
           </div>
           <div class="grid">
-            <label>平均心率 <input name="heartRate" type="number" value="169"></label>
-            <label>平均步频 <input name="averageCadence" type="number" value="136"></label>
+            <label>平均心率 <input name="heartRate" type="number" value="166"></label>
+            <label>平均步频 <input name="averageCadence" type="number" value="168"></label>
           </div>
           <div class="grid">
-            <label>平均功率 <input name="power" type="number" value="153"></label>
-            <label>平均步幅 <input name="stride" type="number" step="0.01" value="0.84"></label>
+            <label>平均功率 <input name="power" type="number" value="157"></label>
+            <label>平均步幅 <input name="stride" type="number" step="0.01" value="0.87"></label>
           </div>
           <label>累计爬升 <input name="cumulativeClimb" type="number" value="0"></label>
         </fieldset>
 
         <fieldset>
           <legend>分段详情</legend>
-          <div class="grid">
-            <label>第 1 公里 <input name="split1" value="07:08"></label>
-            <label>第 1 心率 <input name="splitHr1" type="number" value="157"></label>
-          </div>
-          <div class="grid">
-            <label>第 2 公里 <input name="split2" value="06:07"></label>
-            <label>第 2 心率 <input name="splitHr2" type="number" value="174"></label>
-          </div>
-          <div class="grid">
-            <label>第 3 公里 <input name="split3" value="19:00"></label>
-            <label>第 3 心率 <input name="splitHr3" type="number" value="170"></label>
-          </div>
+          <p class="status">分段会根据公里数和训练时长自动生成。</p>
         </fieldset>
 
         <fieldset>
@@ -294,8 +283,144 @@
       return String(value || "").replaceAll("-", "/");
     }
 
-    function paceText(value) {
-      return String(value || "").replace(":", "'") + "''";
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function parseHms(value, fallbackSeconds = 0) {
+      const parts = String(value || "").split(":").map((part) => Number(part));
+      if (parts.length === 2 && parts.every(Number.isFinite)) {
+        return Math.max(0, parts[0] * 60 + parts[1]);
+      }
+      if (parts.length === 3 && parts.every(Number.isFinite)) {
+        return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
+      }
+      return fallbackSeconds;
+    }
+
+    function parseClockTime(value, fallbackSeconds = 0) {
+      const parts = String(value || "").split(":").map((part) => Number(part));
+      if (parts.length >= 2 && parts.every(Number.isFinite)) {
+        return Math.max(0, parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0));
+      }
+      return fallbackSeconds;
+    }
+
+    function calculateStatusTime(endTime, date) {
+      const seed = `${date || ""} ${endTime || ""}`;
+      let hash = 0;
+      for (let i = 0; i < seed.length; i += 1) {
+        hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+      }
+      const offsetMinutes = 3 + (hash % 3);
+      return secondsToHms((parseClockTime(endTime, 0) + offsetMinutes * 60) % (24 * 3600)).slice(0, 5);
+    }
+
+    function drawStatusBar(statusTime, statusIcons) {
+      text(statusTime, 48, 54, 38, 700, "#111");
+      ctx.drawImage(statusIcons, 500, 0, 560, 92);
+    }
+
+    function secondsToHms(seconds) {
+      const safe = Math.max(0, Math.round(seconds));
+      const hh = String(Math.floor(safe / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((safe % 3600) / 60)).padStart(2, "0");
+      const ss = String(safe % 60).padStart(2, "0");
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    function secondsToMmss(seconds) {
+      const safe = Math.max(0, Math.round(seconds));
+      const mm = String(Math.floor(safe / 60)).padStart(2, "0");
+      const ss = String(safe % 60).padStart(2, "0");
+      return `${mm}:${ss}`;
+    }
+
+    function secondsToPace(secondsPerKm) {
+      const safe = Math.max(1, Math.round(secondsPerKm));
+      const mm = String(Math.floor(safe / 60)).padStart(2, "0");
+      const ss = String(safe % 60).padStart(2, "0");
+      return `${mm}'${ss}''`;
+    }
+
+    function calculateStartTime(endTime, totalTime) {
+      const endSeconds = parseClockTime(endTime, 0);
+      const totalSeconds = parseHms(totalTime, 0);
+      const day = 24 * 3600;
+      const startSeconds = (endSeconds - totalSeconds + day) % day;
+      return secondsToHms(startSeconds).slice(0, 5);
+    }
+
+    function buildSplitRows(totalKm, sportSeconds, averageHeartRate) {
+      const safeKm = Math.max(0.01, Number(totalKm) || 0.01);
+      const fullRows = Math.floor(safeKm);
+      const remainder = Number((safeKm - fullRows).toFixed(2));
+      const distances = Array.from({ length: fullRows }, () => 1);
+      if (remainder >= 0.01 || distances.length === 0) distances.push(Math.max(0.01, remainder));
+
+      const avgPace = sportSeconds / safeKm;
+      const factors = [1.03, 0.95, 1.02, 0.99, 1.06, 0.98, 1.01, 1.04];
+      const rawSeconds = distances.map((distance, index) => avgPace * distance * factors[index % factors.length]);
+      const rawTotal = rawSeconds.reduce((sum, seconds) => sum + seconds, 0);
+      const rowSeconds = rawSeconds.map((seconds) => Math.max(1, Math.round(seconds * sportSeconds / rawTotal)));
+      rowSeconds[rowSeconds.length - 1] += Math.round(sportSeconds) - rowSeconds.reduce((sum, seconds) => sum + seconds, 0);
+
+      const fastestIndex = rowSeconds.reduce((best, seconds, index) => {
+        const pace = seconds / distances[index];
+        const bestPace = rowSeconds[best] / distances[best];
+        return pace < bestPace ? index : best;
+      }, 0);
+
+      return distances.map((distance, index) => ({
+        index: index + 1,
+        badge: index === fastestIndex ? "最快" : "",
+        distance,
+        time: secondsToMmss(rowSeconds[index]),
+        pace: secondsToPace(rowSeconds[index] / distance),
+        heartRate: Math.round(clamp(averageHeartRate + [-8, 4, 1, -2, 3, 0, -4, 2][index % 8], 120, 188)),
+        active: index === fastestIndex,
+      }));
+    }
+
+    function deriveRunData(raw) {
+      const totalKm = Math.max(0.01, Number(raw.totalKm) || 0.01);
+      const sportSeconds = parseHms(raw.sportTime, 1);
+      const totalSeconds = Math.max(sportSeconds, parseHms(raw.totalTime, sportSeconds));
+      const paceSeconds = sportSeconds / totalKm;
+      const sportMinutes = sportSeconds / 60;
+      const cadence = Math.round(clamp(176 - (paceSeconds - 300) * 0.07, 150, 178));
+      const heartRate = Math.round(clamp(202 - paceSeconds * 0.07 + totalKm, 132, 178));
+      const speedMetersPerMinute = totalKm * 1000 / sportMinutes;
+      const derivedStride = clamp(speedMetersPerMinute / cadence, 0.65, 1.35).toFixed(2);
+      const manualStride = Number(raw.stride);
+      const stride = Number.isFinite(manualStride) && manualStride > 0 ? manualStride.toFixed(2) : derivedStride;
+      const calories = Math.round(totalKm * 65);
+      const power = Math.round(clamp(speedMetersPerMinute * 1.15, 105, 280));
+      const exerciseLoad = Math.round(clamp(sportMinutes * (heartRate / 180) * 2.3, 10, 150));
+      const derived = {
+        ...raw,
+        totalKm,
+        sportTime: secondsToHms(sportSeconds),
+        totalTime: secondsToHms(totalSeconds),
+        startTime: calculateStartTime(raw.endTime, secondsToHms(totalSeconds)),
+        statusTime: calculateStatusTime(raw.endTime, raw.date),
+        pace: secondsToPace(paceSeconds),
+        calories,
+        exerciseLoad,
+        heartRate,
+        averageCadence: cadence,
+        power,
+        stride,
+      };
+      derived.splitRows = buildSplitRows(totalKm, sportSeconds, heartRate);
+      return derived;
+    }
+
+    function syncDerivedFields(data) {
+      for (const key of ["sportTime", "totalTime", "pace", "calories", "exerciseLoad", "heartRate", "averageCadence", "power"]) {
+        const field = form.elements.namedItem(key);
+        if (field) field.value = String(data[key]);
+      }
     }
 
     async function fetchWeather() {
@@ -327,39 +452,36 @@
     }
 
     async function render() {
-      const v = values();
+      const v = deriveRunData(values());
+      syncDerivedFields(v);
       const [, , mapPath] = mapById(v.map);
-      const map = await loadImage(mapPath);
-      canvas.height = 3700;
+      const [map, statusIcons] = await Promise.all([
+        loadImage(mapPath),
+        loadImage("/assets/status-icons.png"),
+      ]);
+      canvas.height = Math.max(3700, 3476 + v.splitRows.length * 80 + 48);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      text("‹", 55, 112, 82, 300);
-      roundedRect(635, 52, 145, 72, 36, "#f7f7f7");
-      text("▣ 隐私", 660, 99, 32, 700);
-      text("↗  ⋯", 870, 104, 64, 700);
+      drawStatusBar(v.statusTime, statusIcons);
+      text("‹", 55, 168, 82, 300);
+      roundedRect(635, 92, 145, 72, 36, "#f7f7f7");
+      text("▣ 隐私", 660, 139, 32, 700);
+      text("↗  ⋯", 870, 144, 64, 700);
 
-      roundedRect(65, 168, 74, 74, 37, "#f4f4f4");
-      text((v.username || "K").slice(0, 1), 89, 218, 34, 700, "#ddd");
-      text(v.username || "keep", 160, 208, 42, 700);
-      text(`${dateText(v.date)} ${v.endTime} - ${v.endTime} ${v.location} · ${v.weather} · ${v.temperature}`, 160, 252, 32, 400, "#8f8f94");
+      roundedRect(65, 208, 74, 74, 37, "#f4f4f4");
+      text((v.username || "K").slice(0, 1), 89, 258, 34, 700, "#ddd");
+      text(v.username || "keep", 160, 248, 42, 700);
+      text(`${dateText(v.date)} ${v.startTime} - ${v.endTime} ${v.location} · ${v.weather} · ${v.temperature}`, 160, 292, 32, 400, "#8f8f94");
 
-      text("🏃 户外跑步", 65, 386, 48, 800, "#292a33");
-      text(Number(v.totalKm || 0).toFixed(2), 58, 576, 170, 900);
-      text("公里", 438, 576, 48);
+      text("🏃 户外跑步", 65, 426, 48, 800, "#292a33");
+      text(Number(v.totalKm || 0).toFixed(2), 58, 616, 170, 900);
+      text("公里", 438, 616, 48);
 
       ctx.globalAlpha = 0.72;
-      ctx.drawImage(map, 40, 646, 1000, 800);
+      ctx.drawImage(map, 40, 686, 1000, 800);
       ctx.globalAlpha = 1;
-      text("慢", 88, 1394, 28, 700, "#e75f6a");
-      ctx.strokeStyle = "#2dcfb5";
-      ctx.lineWidth = 8;
-      ctx.beginPath();
-      ctx.moveTo(130, 1386);
-      ctx.lineTo(240, 1386);
-      ctx.stroke();
-      text("快", 255, 1394, 28, 700, "#14c8cc");
       text("运动数据", 58, 1546, 48, 800, "#292a33");
       detailButton(835, 1494);
       const metrics = [
@@ -417,36 +539,111 @@
       text("用时", 490, 3401, 28, 600, "#999");
       text("配速", 710, 3401, 28, 600, "#999");
       text("心率", 925, 3401, 28, 600, "#999");
-      renderRows(v);
+      renderRows(v.splitRows);
     }
 
-    function renderRows(v) {
-      const rows = [
-        ["1", "", "1.00", v.split1, paceText(v.split1), v.splitHr1],
-        ["2", "最快", "1.00", v.split2, paceText(v.split2), v.splitHr2],
-        ["3", "", "1.00", v.split3, paceText(v.split3), v.splitHr3],
-      ];
+    function renderRows(rows) {
       let y = 3476;
       for (const row of rows) {
-        const active = row[0] === "2";
+        const active = row.active;
         if (active) roundedRect(55, y - 48, 970, 64, 32, "#42ca9d");
         const color = active ? "#fff" : "#666";
         const muted = active ? "#fff" : "#aaa";
-        text(row[0], 78, y, 32, 500, muted);
-        text(row[1], 160, y, 30, 700, color);
-        text(row[2], 255, y, 32, 500, color);
-        text(row[3], 490, y, 32, 500, color);
-        text(row[4], 710, y, 32, 600, active ? "#fff" : "#20c28e");
-        text(row[5], 925, y, 32, 600, active ? "#fff" : "#e54e70");
+        text(row.index, 78, y, 32, 500, muted);
+        text(row.badge, 160, y, 30, 700, color);
+        text(row.distance.toFixed(2), 255, y, 32, 500, color);
+        text(row.time, 490, y, 32, 500, color);
+        text(row.pace, 710, y, 32, 600, active ? "#fff" : "#20c28e");
+        text(row.heartRate, 925, y, 32, 600, active ? "#fff" : "#e54e70");
         y += 80;
       }
     }
 
-    function download() {
+    function canvasToBlob() {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("无法生成图片文件"));
+        }, "image/png");
+      });
+    }
+
+    function isMobileSaveHost() {
+      return /Quark|UCBrowser|MicroMessenger|MQQBrowser|QQBrowser|iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent);
+    }
+
+    function prepareSavePage() {
+      if (!isMobileSaveHost()) return null;
+      const page = window.open("", "_blank");
+      if (!page) return null;
+      page.document.write(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>正在生成图片</title><style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f6f8;color:#17181d}.wrap{padding:18px;text-align:center}.tip{margin:0 0 14px;color:#62666f;font-size:15px;line-height:1.6}</style></head><body><div class="wrap"><p class="tip">正在生成图片，请稍候...</p></div></body></html>`);
+      page.document.close();
+      return page;
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function showSavePage(page, blob, filename) {
+      const dataUrl = await blobToDataUrl(blob);
+      const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title><style>body{margin:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17181d}.bar{position:sticky;top:0;background:rgba(255,255,255,.96);padding:12px 14px;border-bottom:1px solid #e8eaee}.bar h1{font-size:17px;margin:0 0 4px}.bar p{font-size:14px;margin:0;color:#62666f;line-height:1.5}.image{display:block;width:100%;max-width:720px;margin:0 auto;background:#fff}</style></head><body><div class="bar"><h1>图片已生成</h1><p>长按图片保存到相册。若浏览器提示分享或保存，也可以直接使用系统菜单。</p></div><img class="image" src="${dataUrl}" alt="Keep 跑步截图"></body></html>`;
+      if (page && !page.closed) {
+        page.document.open();
+        page.document.write(html);
+        page.document.close();
+        return true;
+      }
+      const opened = window.open("", "_blank");
+      if (opened) {
+        opened.document.write(html);
+        opened.document.close();
+        return true;
+      }
+      return false;
+    }
+
+    function openImageFallback(blob) {
+      const objectUrl = URL.createObjectURL(blob);
+      location.href = objectUrl;
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    }
+
+    async function download() {
+      const savePage = prepareSavePage();
+      const blob = await canvasToBlob();
+      const filename = `keep-${Date.now()}.png`;
+      const file = new File([blob], filename, { type: "image/png" });
+
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        try {
+          await navigator.share({ files: [file], title: "Keep 跑步截图" });
+          if (savePage && !savePage.closed) savePage.close();
+          return;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            if (savePage && !savePage.closed) savePage.close();
+            return;
+          }
+        }
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `keep-${Date.now()}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.download = filename;
+      link.href = objectUrl;
       link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+
+      if (isMobileSaveHost()) {
+        const shown = await showSavePage(savePage, blob, filename);
+        if (!shown) openImageFallback(blob);
+      }
     }
 
     function updateLocationFromMap() {
