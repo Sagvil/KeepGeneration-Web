@@ -49,17 +49,23 @@ function nearestHourlyPoint(hourly, date, time) {
   return {
     temp: hourly.temperature_2m[safeIndex],
     code: hourly.weather_code?.[safeIndex],
+    precipitationProbability: hourly.precipitation_probability?.[safeIndex],
+    precipitation: hourly.precipitation?.[safeIndex],
   };
 }
 
-function weatherCodeText(code) {
+function weatherCodeText(code, point = {}) {
+  const precipitationProbability = Number(point.precipitationProbability ?? 100);
+  const precipitation = Number(point.precipitation ?? 1);
+  const hasLowRainSignal = precipitationProbability <= 15 && precipitation <= 0.1;
+
   if (code === 0) return "晴";
   if ([1, 2, 3].includes(code)) return "多云";
   if ([45, 48].includes(code)) return "雾";
   if ([51, 53, 55, 56, 57].includes(code)) return "毛毛雨";
   if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "雨";
   if ([71, 73, 75, 77, 85, 86].includes(code)) return "雪";
-  if ([95, 96, 99].includes(code)) return "雷雨";
+  if ([95, 96, 99].includes(code)) return hasLowRainSignal ? "多云" : "雷雨";
   return "多云";
 }
 
@@ -69,7 +75,7 @@ async function fetchOpenMeteoEndpoint(endpoint, preset, date, time) {
   apiUrl.searchParams.set("longitude", String(preset.lon));
   apiUrl.searchParams.set("start_date", date);
   apiUrl.searchParams.set("end_date", date);
-  apiUrl.searchParams.set("hourly", "temperature_2m,weather_code");
+  apiUrl.searchParams.set("hourly", "temperature_2m,weather_code,precipitation_probability,precipitation");
   apiUrl.searchParams.set("timezone", "Asia/Shanghai");
 
   const response = await fetch(apiUrl);
@@ -87,25 +93,21 @@ async function fetchOpenMeteoEndpoint(endpoint, preset, date, time) {
 }
 
 async function fetchOpenMeteo(preset, date, time, openWeatherStatus = null) {
-  const endpoints = [
-    ["open-meteo-forecast", "https://api.open-meteo.com/v1/forecast"],
-    ["open-meteo-archive", "https://archive-api.open-meteo.com/v1/archive"],
-  ];
+  const source = "open-meteo-archive";
+  const endpoint = "https://archive-api.open-meteo.com/v1/archive";
   const attempts = [];
 
-  for (const [source, endpoint] of endpoints) {
-    const result = await fetchOpenMeteoEndpoint(endpoint, preset, date, time);
-    if (result.ok) {
-      const point = result.point;
-      return json({
-        weather: weatherCodeText(Number(point.code)),
-        temperature: `${Math.round(Number(point.temp))}°C`,
-        source,
-        openWeatherStatus,
-      });
-    }
-    attempts.push({ source, status: result.status });
+  const result = await fetchOpenMeteoEndpoint(endpoint, preset, date, time);
+  if (result.ok) {
+    const point = result.point;
+    return json({
+      weather: weatherCodeText(Number(point.code), point),
+      temperature: `${Math.round(Number(point.temp))}°C`,
+      source,
+      openWeatherStatus,
+    });
   }
+  attempts.push({ source, status: result.status });
 
   return json({
     error: "open_meteo_error",

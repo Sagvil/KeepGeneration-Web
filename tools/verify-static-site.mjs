@@ -65,6 +65,8 @@ assert.match(html, /toBlob/, "download must use canvas.toBlob for mobile compati
 assert.match(html, /navigator\.share/, "download must use native sharing when mobile browsers support file sharing");
 assert.match(html, /URL\.createObjectURL/, "download must fallback to an object URL when native sharing is unavailable");
 assert.match(html, /function isMobileSaveHost/, "download must detect mobile browsers that block synthetic downloads");
+assert.match(html, /function isIosSafari/, "download must detect iOS Safari explicitly");
+assert.match(html, /if \(isIosSafari\(\)\)/, "iOS Safari must bypass synthetic downloads and use the save page");
 assert.match(html, /Quark/, "download must explicitly handle Quark browser save fallback");
 assert.match(html, /function prepareSavePage/, "download must pre-open a save page before async image generation");
 assert.match(html, /FileReader/, "download fallback must convert the generated blob into an image page for long-press saving");
@@ -113,8 +115,8 @@ const worker = read("src/index.js");
 assert.match(worker, /OPENWEATHER_API_KEY/, "Worker must read OpenWeather key from secret");
 assert.match(worker, /onecall\/timemachine/, "Worker must use One Call timemachine endpoint");
 assert.match(worker, /env\.ASSETS\.fetch\(request\)/, "Worker must serve static assets");
-assert.match(worker, /api\.open-meteo\.com\/v1\/forecast/, "Worker must use Open-Meteo forecast as the first no-secret fallback");
-assert.match(worker, /archive-api\.open-meteo\.com/, "Worker must keep archive data as a secondary fallback");
+assert.doesNotMatch(worker, /api\.open-meteo\.com\/v1\/forecast/, "Worker must not query forecast weather");
+assert.match(worker, /archive-api\.open-meteo\.com/, "Worker must query only Open-Meteo archive data");
 assert.match(worker, /23\.096/, "Worker must include Yingdong Sports Center latitude data");
 assert.match(worker, /113\.29/, "Worker must include Yingdong Sports Center longitude data");
 assert.doesNotMatch(worker, /a17678cff5cfc28837bc3604d001ad3c/, "OpenWeather key must not be committed");
@@ -127,6 +129,8 @@ function openMeteoMock() {
       time: ["2026-05-13T21:00"],
       temperature_2m: [28.4],
       weather_code: [3],
+      precipitation_probability: [0],
+      precipitation: [0],
     },
   });
 }
@@ -166,14 +170,39 @@ const missingSecretResponse = await workerModule.default.fetch(
     ASSETS: { fetch: () => new Response("asset") },
   },
 );
-assert.equal(missingSecretResponse.status, 200, "weather route should fallback without OpenWeather secret");
-assert.equal((await missingSecretResponse.json()).source, "open-meteo-forecast");
-assert.match(String(requestedWeatherUrl), /api\.open-meteo\.com\/v1\/forecast/, "missing-secret fallback should try Open-Meteo forecast first");
+assert.equal(missingSecretResponse.status, 200, "weather route should use archive without OpenWeather secret");
+assert.equal((await missingSecretResponse.json()).source, "open-meteo-archive");
+assert.match(String(requestedWeatherUrl), /archive-api\.open-meteo\.com/, "missing-secret route should query Open-Meteo archive");
+assert.doesNotMatch(String(requestedWeatherUrl), /api\.open-meteo\.com\/v1\/forecast/, "missing-secret route must not query Open-Meteo forecast");
+assert.match(String(requestedWeatherUrl), /precipitation_probability/, "Open-Meteo fallback must request precipitation probability");
+assert.match(String(requestedWeatherUrl), /precipitation/, "Open-Meteo fallback must request precipitation amount");
 
-let fallbackCalls = [];
+globalThis.fetch = async () => Response.json({
+  hourly: {
+    time: ["2026-05-27T21:00"],
+    temperature_2m: [29.3],
+    weather_code: [95],
+    precipitation_probability: [7],
+    precipitation: [0],
+  },
+});
+const lowRainThunderstormResponse = await workerModule.default.fetch(
+  new Request("https://keep.sagvil.cn/api/weather?map=map4&date=2026-05-27&time=21:37"),
+  {
+    ASSETS: { fetch: () => new Response("asset") },
+  },
+);
+assert.equal(lowRainThunderstormResponse.status, 200, "low-rain thunderstorm forecast should still return weather");
+assert.deepEqual(
+  await lowRainThunderstormResponse.json(),
+  { weather: "多云", temperature: "29°C", source: "open-meteo-archive", openWeatherStatus: "missing_secret" },
+  "Open-Meteo thunderstorm code with near-zero precipitation must not be shown as thunderstorm",
+);
+
+let openWeatherFallbackCalls = [];
 globalThis.fetch = async (url) => {
-  fallbackCalls.push(String(url));
-  if (fallbackCalls.length === 1) {
+  openWeatherFallbackCalls.push(String(url));
+  if (openWeatherFallbackCalls.length === 1) {
     return Response.json({ code: 401, message: "Invalid API key" }, { status: 401 });
   }
   return openMeteoMock();
@@ -186,26 +215,10 @@ const fallbackResponse = await workerModule.default.fetch(
   },
 );
 assert.equal(fallbackResponse.status, 200, "weather route should fallback when OpenWeather rejects the key");
-assert.deepEqual(await fallbackResponse.json(), { weather: "多云", temperature: "28°C", source: "open-meteo-forecast", openWeatherStatus: 401 });
-assert.match(fallbackCalls[1], /api\.open-meteo\.com\/v1\/forecast/, "OpenWeather rejection should fallback to Open-Meteo forecast first");
-
-let archiveFallbackCalls = [];
-globalThis.fetch = async (url) => {
-  archiveFallbackCalls.push(String(url));
-  if (archiveFallbackCalls.length === 1) {
-    return Response.json({ error: "temporary forecast error" }, { status: 504 });
-  }
-  return openMeteoMock();
-};
-const archiveFallbackResponse = await workerModule.default.fetch(
-  new Request("https://keep.sagvil.cn/api/weather?map=map4&date=2026-05-13&time=21:37"),
-  {
-    ASSETS: { fetch: () => new Response("asset") },
-  },
-);
-assert.equal(archiveFallbackResponse.status, 200, "weather route should fallback to archive if forecast fails");
-assert.match(archiveFallbackCalls[0], /api\.open-meteo\.com\/v1\/forecast/, "first Open-Meteo fallback should be forecast");
-assert.match(archiveFallbackCalls[1], /archive-api\.open-meteo\.com/, "second Open-Meteo fallback should be archive");
+assert.deepEqual(await fallbackResponse.json(), { weather: "多云", temperature: "28°C", source: "open-meteo-archive", openWeatherStatus: 401 });
+assert.equal(openWeatherFallbackCalls.length, 2, "OpenWeather rejection should call only OpenWeather and Open-Meteo archive");
+assert.match(openWeatherFallbackCalls[1], /archive-api\.open-meteo\.com/, "OpenWeather rejection should fallback to Open-Meteo archive");
+assert.doesNotMatch(openWeatherFallbackCalls.join("\n"), /api\.open-meteo\.com\/v1\/forecast/, "OpenWeather rejection must not query forecast");
 globalThis.fetch = originalFetch;
 
 console.log("static site checks passed");

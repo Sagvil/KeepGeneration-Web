@@ -572,6 +572,11 @@
       return /Quark|UCBrowser|MicroMessenger|MQQBrowser|QQBrowser|iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent);
     }
 
+    function isIosSafari() {
+      const ua = navigator.userAgent;
+      return /iPhone|iPad|iPod/i.test(ua) && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|UCBrowser|MQQBrowser|QQBrowser/i.test(ua);
+    }
+
     function prepareSavePage() {
       if (!isMobileSaveHost()) return null;
       const page = window.open("", "_blank");
@@ -619,6 +624,12 @@
       const blob = await canvasToBlob();
       const filename = `keep-${Date.now()}.png`;
       const file = new File([blob], filename, { type: "image/png" });
+
+      if (isIosSafari()) {
+        const shown = await showSavePage(savePage, blob, filename);
+        if (!shown) openImageFallback(blob);
+        return;
+      }
 
       if (navigator.canShare?.({ files: [file] }) && navigator.share) {
         try {
